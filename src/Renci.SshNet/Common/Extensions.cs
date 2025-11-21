@@ -418,6 +418,14 @@ namespace Renci.SshNet.Common
             }
         }
 
+        extension(Array)
+        {
+            internal static int MaxLength
+            {
+                get { return 0X7FFFFFC7; }
+            }
+        }
+
         extension(Task t)
         {
             internal bool IsCompletedSuccessfully
