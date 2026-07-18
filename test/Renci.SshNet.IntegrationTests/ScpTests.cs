@@ -1,5 +1,7 @@
 ﻿using Renci.SshNet.Common;
 
+#pragma warning disable CS0618 // These SCP tests use the obsolete default-transformation constructors.
+
 namespace Renci.SshNet.IntegrationTests
 {
     // TODO SCP: UPLOAD / DOWNLOAD ZERO LENGTH FILES
