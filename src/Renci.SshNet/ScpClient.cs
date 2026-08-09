@@ -89,6 +89,8 @@ namespace Renci.SshNet
         private static readonly byte[] SuccessConfirmationCode = { 0 };
         private static readonly byte[] ErrorConfirmationCode = { 1 };
 
+        private static readonly char[] InvalidLocalNameChars = Path.GetInvalidFileNameChars();
+
         private IRemotePathTransformation _remotePathTransformation;
         private TimeSpan _operationTimeout;
 
@@ -824,6 +826,33 @@ namespace Renci.SshNet
             CheckReturnCode(input);
         }
 
+        /// <summary>
+        /// Ensures that a file or directory name received from the remote host in the SCP
+        /// protocol stream is a plain local name that cannot redirect a write outside of the
+        /// caller-supplied destination directory.
+        /// </summary>
+        /// <param name="name">The file or directory name as sent by the server.</param>
+        /// <exception cref="ScpException">
+        /// <paramref name="name"/> is empty, refers to the current or parent directory, or
+        /// contains a character that is not valid in a local file name (such as a directory
+        /// separator).
+        /// </exception>
+        internal static void EnsureValidLocalName(string name)
+        {
+            // A legitimate SCP server only ever sends a single, plain path component in a
+            // C (file) or D (directory) record. Reject anything that is empty, refers to the
+            // current/parent directory, or carries a directory separator, drive qualifier or
+            // other character that is not valid in a local file name. Path.GetInvalidFileNameChars()
+            // is platform-aware: on Windows it includes '\', '/' and ':'; on Unix it includes '/'.
+            if (string.IsNullOrEmpty(name) ||
+                name.Equals(".", StringComparison.Ordinal) ||
+                name.Equals("..", StringComparison.Ordinal) ||
+                name.IndexOfAny(InvalidLocalNameChars) >= 0)
+            {
+                throw new ScpException($"The server sent a file or directory name (\"{name}\") that is not a valid local name.");
+            }
+        }
+
         private void InternalDownload(IChannel channel, Stream input, Stream output, string filename, long length)
         {
             var buffer = new byte[Math.Min(length, BufferSize)];
@@ -896,6 +925,10 @@ namespace Renci.SshNet
                     DirectoryInfo newDirectoryInfo;
                     if (directoryCounter > 0)
                     {
+                        // The server-supplied name is combined into a local path; ensure it
+                        // cannot escape the destination directory.
+                        EnsureValidLocalName(filename);
+
                         newDirectoryInfo = Directory.CreateDirectory(Path.Combine(currentDirectoryFullName, filename));
                         newDirectoryInfo.LastAccessTime = accessedTime;
                         newDirectoryInfo.LastWriteTime = modifiedTime;
@@ -923,6 +956,10 @@ namespace Renci.SshNet
 
                     if (fileSystemInfo is not FileInfo fileInfo)
                     {
+                        // The server-supplied name is combined into a local path; ensure it
+                        // cannot escape the destination directory.
+                        EnsureValidLocalName(fileName);
+
                         fileInfo = new FileInfo(Path.Combine(currentDirectoryFullName, fileName));
                     }
 
